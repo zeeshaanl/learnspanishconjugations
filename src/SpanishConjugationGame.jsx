@@ -55,14 +55,10 @@ const SpanishConjugationGame = () => {
   // Track current session level - never goes down during a session
   const [sessionLevel, setSessionLevel] = useState(1);
   
-  // Calculate potential level from current streak
-  // Level 2: 2 correct in a row, Level 3: 3 correct in a row
-  const potentialLevel = streak >= 3 ? 3 : streak >= 2 ? 2 : 1;
-  
-  // Level can only increase during a session, never decrease
-  const level = Math.max(sessionLevel, potentialLevel);
+  // Simple level calculation: Level 2 at 2 correct, Level 3 at 4 correct
+  const level = sessionLevel;
 
-  // Update best streak and session level when current streak exceeds it
+  // Update best streak and session level when current streak increases
   useEffect(() => {
     if (streak > bestStreak) {
       setBestStreak(streak);
@@ -72,11 +68,13 @@ const SpanishConjugationGame = () => {
       setTimeout(() => setShowNewBestStreak(false), 4000);
     }
     
-    // Update session level when potential level increases
-    if (potentialLevel > sessionLevel) {
-      setSessionLevel(potentialLevel);
+    // Simple level progression: Level 2 at 2 correct, Level 3 at 4 correct
+    if (streak >= 4 && sessionLevel < 3) {
+      setSessionLevel(3);
+    } else if (streak >= 2 && sessionLevel < 2) {
+      setSessionLevel(2);
     }
-  }, [streak, bestStreak, setBestStreak, potentialLevel, sessionLevel]);
+  }, [streak, bestStreak, setBestStreak, sessionLevel]);
 
   // Timer effect
   useEffect(() => {
