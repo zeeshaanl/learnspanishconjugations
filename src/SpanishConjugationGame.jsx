@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Zap, Trophy, Timer, Brain, Star } from 'lucide-react';
 import { verbs, tenseNames, persons } from './verbDatabase';
 import { exampleSentences } from './exampleSentences';
+import Confetti from './Confetti';
 
 // Custom hook for localStorage persistence
 const useLocalStorage = (key, initialValue) => {
@@ -49,19 +50,33 @@ const SpanishConjugationGame = () => {
   // Persistent best streak using localStorage
   const [bestStreak, setBestStreak] = useLocalStorage('spanishConjugationBestStreak', 0);
   const [showNewBestStreak, setShowNewBestStreak] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
 
-  // Derive the player level from the current streak. Every 3-answer streak increases the level, capped at 3.
-  const level = Math.min(Math.floor(streak / 3) + 1, 3);
+  // Track current session level - never goes down during a session
+  const [sessionLevel, setSessionLevel] = useState(1);
+  
+  // Calculate potential level from current streak
+  // Level 2: 2 correct in a row, Level 3: 3 correct in a row
+  const potentialLevel = streak >= 3 ? 3 : streak >= 2 ? 2 : 1;
+  
+  // Level can only increase during a session, never decrease
+  const level = Math.max(sessionLevel, potentialLevel);
 
-  // Update best streak when current streak exceeds it
+  // Update best streak and session level when current streak exceeds it
   useEffect(() => {
     if (streak > bestStreak) {
       setBestStreak(streak);
       setShowNewBestStreak(true);
-      // Hide the celebration after 3 seconds
-      setTimeout(() => setShowNewBestStreak(false), 3000);
+      setShowConfetti(true);
+      // Hide the celebration after 4 seconds
+      setTimeout(() => setShowNewBestStreak(false), 4000);
     }
-  }, [streak, bestStreak, setBestStreak]);
+    
+    // Update session level when potential level increases
+    if (potentialLevel > sessionLevel) {
+      setSessionLevel(potentialLevel);
+    }
+  }, [streak, bestStreak, setBestStreak, potentialLevel, sessionLevel]);
 
   // Timer effect
   useEffect(() => {
@@ -78,15 +93,8 @@ const SpanishConjugationGame = () => {
     const allVerbs = { ...verbs.regular, ...verbs.irregular };
     const verbList = Object.keys(allVerbs);
     
-    // Store current question as previous question before generating new one
-    // Only do this if we're not showing an incorrect answer (which already sets previousQuestion)
-    if (currentVerb && currentTense && feedback?.type !== 'incorrect') {
-      setPreviousQuestion({
-        verb: currentVerb,
-        tense: currentTense,
-        conjugations: allVerbs[currentVerb][currentTense]
-      });
-    }
+    // Clear previous question when generating new question
+    setPreviousQuestion(null);
     
     // Weighted selection based on mistakes
     let selectedVerb;
@@ -131,6 +139,13 @@ const SpanishConjugationGame = () => {
     const isExactMatch = userAnswerTrimmed.toLowerCase() === correctAnswer.toLowerCase();
     const isMatchWithoutAccents = removeAccents(userAnswerTrimmed.toLowerCase()) === removeAccents(correctAnswer.toLowerCase());
     
+    // Set previous question immediately when checking answer
+    setPreviousQuestion({
+      verb: currentVerb,
+      tense: currentTense,
+      conjugations: allVerbs[currentVerb][currentTense]
+    });
+    
     setTotalQuestions(totalQuestions + 1);
     
     if (isExactMatch) {
@@ -153,13 +168,6 @@ const SpanishConjugationGame = () => {
         message: `Incorrect. The answer is: ${correctAnswer}` 
       });
       setStreak(0);
-      
-      // Show current question conjugation immediately when wrong
-      setPreviousQuestion({
-        verb: currentVerb,
-        tense: currentTense,
-        conjugations: allVerbs[currentVerb][currentTense]
-      });
       
       // Add to mistakes for spaced repetition
       setMistakes([...mistakes, { 
@@ -228,11 +236,18 @@ const SpanishConjugationGame = () => {
   const resetGame = () => {
     setScore(0);
     setStreak(0);
+    setSessionLevel(1); // Reset session level for new game
     setTotalQuestions(0);
     setCorrectAnswers(0);
     setMistakes([]);
     setPreviousQuestion(null);
+    setShowConfetti(false);
     generateQuestion();
+  };
+
+  // Handle confetti completion
+  const handleConfettiComplete = () => {
+    setShowConfetti(false);
   };
 
   // Initialize game
@@ -256,6 +271,9 @@ const SpanishConjugationGame = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
+      {/* Confetti Animation */}
+      <Confetti isActive={showConfetti} onComplete={handleConfettiComplete} />
+      
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -293,54 +311,92 @@ const SpanishConjugationGame = () => {
           
           {/* Stats */}
           <div className="flex justify-center">
-            <div className={`grid ${statsGridColsClass} gap-4 text-center`}>
-            <div className="bg-purple-100 p-3 rounded">
-              <Trophy className="w-6 h-6 mx-auto text-purple-600" />
-              <p className="text-2xl font-bold">{score}</p>
-              <p className="text-sm text-gray-600">Score</p>
-            </div>
-            <div className="bg-orange-100 p-3 rounded">
-              <Zap className="w-6 h-6 mx-auto text-orange-600" />
-              <p className="text-2xl font-bold">{streak}</p>
-              <p className="text-sm text-gray-600">Streak</p>
-            </div>
-            <div className={
-              `p-3 rounded transition-all duration-300 bg-yellow-200 border border-yellow-300 shadow-md`
-            }>
-              <Star className="w-6 h-6 mx-auto text-yellow-700" />
-              <p className="text-2xl font-bold">{bestStreak}</p>
-              <p className="text-sm text-gray-600">Best Streak</p>
-            </div>
-            <div className="bg-green-100 p-3 rounded">
-              <Brain className="w-6 h-6 mx-auto text-green-600" />
-              <p className="text-2xl font-bold">{level}</p>
-              <p className="text-sm text-gray-600">Level</p>
-            </div>
-            <div className="bg-blue-100 p-3 rounded">
-              <CheckCircle className="w-6 h-6 mx-auto text-blue-600" />
-              <p className="text-2xl font-bold">{accuracy}%</p>
-              <p className="text-sm text-gray-600">Accuracy</p>
-            </div>
-            {gameMode === 'timed' && (
-              <div className="bg-red-100 p-3 rounded">
-                <Timer className="w-6 h-6 mx-auto text-red-600" />
-                <p className="text-2xl font-bold">{timeLeft}</p>
-                <p className="text-sm text-gray-600">Time</p>
+            {/* Mobile: flex rows, Desktop: grid */}
+            <div className="w-full max-w-lg">
+              {/* Mobile layout (below sm) */}
+              <div className="block sm:hidden">
+                {/* Row 1: Streak, Best Streak */}
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1 bg-orange-100 p-2 rounded flex flex-col items-center justify-center">
+                    <Zap className="w-5 h-5 mx-auto text-orange-600" />
+                    <p className="text-lg font-bold">{streak}</p>
+                    <p className="text-xs text-gray-600">Streak</p>
+                  </div>
+                  <div className="flex-1 p-2 rounded flex flex-col items-center justify-center transition-all duration-300 bg-yellow-200 border border-yellow-300 shadow-md">
+                    <Star className="w-5 h-5 mx-auto text-yellow-700" />
+                    <p className="text-lg font-bold">{bestStreak}</p>
+                    <p className="text-xs text-gray-600">Best Streak</p>
+                  </div>
+                </div>
+                {/* Row 2: Score, Level, Accuracy */}
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1 bg-purple-100 p-2 rounded flex flex-col items-center justify-center">
+                    <Trophy className="w-5 h-5 mx-auto text-purple-600" />
+                    <p className="text-lg font-bold">{score}</p>
+                    <p className="text-xs text-gray-600">Score</p>
+                  </div>
+                  <div className="flex-1 bg-green-100 p-2 rounded flex flex-col items-center justify-center">
+                    <Brain className="w-5 h-5 mx-auto text-green-600" />
+                    <p className="text-lg font-bold">{level}</p>
+                    <p className="text-xs text-gray-600">Level</p>
+                  </div>
+                  <div className="flex-1 bg-blue-100 p-2 rounded flex flex-col items-center justify-center">
+                    <CheckCircle className="w-5 h-5 mx-auto text-blue-600" />
+                    <p className="text-lg font-bold">{accuracy}%</p>
+                    <p className="text-xs text-gray-600">Accuracy</p>
+                  </div>
+                </div>
+                {/* Row 3: Timer (timed mode only) */}
+                {gameMode === 'timed' && (
+                  <div className="flex justify-center mb-2">
+                    <div className="bg-red-100 p-2 rounded flex flex-col items-center justify-center min-w-[100px]">
+                      <Timer className="w-5 h-5 mx-auto text-red-600" />
+                      <p className="text-lg font-bold">{timeLeft}</p>
+                      <p className="text-xs text-gray-600">Time</p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+              {/* Desktop layout (sm and above) */}
+              <div className={`hidden sm:grid ${statsGridColsClass} gap-4 text-center`}>
+                <div className="bg-purple-100 p-3 rounded">
+                  <Trophy className="w-6 h-6 mx-auto text-purple-600" />
+                  <p className="text-2xl font-bold">{score}</p>
+                  <p className="text-sm text-gray-600">Score</p>
+                </div>
+                <div className="bg-orange-100 p-3 rounded">
+                  <Zap className="w-6 h-6 mx-auto text-orange-600" />
+                  <p className="text-2xl font-bold">{streak}</p>
+                  <p className="text-sm text-gray-600">Streak</p>
+                </div>
+                <div className={
+                  `p-3 rounded transition-all duration-300 bg-yellow-200 border border-yellow-300 shadow-md`
+                }>
+                  <Star className="w-6 h-6 mx-auto text-yellow-700" />
+                  <p className="text-2xl font-bold">{bestStreak}</p>
+                  <p className="text-sm text-gray-600">Best Streak</p>
+                </div>
+                <div className="bg-green-100 p-3 rounded">
+                  <Brain className="w-6 h-6 mx-auto text-green-600" />
+                  <p className="text-2xl font-bold">{level}</p>
+                  <p className="text-sm text-gray-600">Level</p>
+                </div>
+                <div className="bg-blue-100 p-3 rounded">
+                  <CheckCircle className="w-6 h-6 mx-auto text-blue-600" />
+                  <p className="text-2xl font-bold">{accuracy}%</p>
+                  <p className="text-sm text-gray-600">Accuracy</p>
+                </div>
+                {gameMode === 'timed' && (
+                  <div className="bg-red-100 p-3 rounded">
+                    <Timer className="w-6 h-6 mx-auto text-red-600" />
+                    <p className="text-2xl font-bold">{timeLeft}</p>
+                    <p className="text-sm text-gray-600">Time</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
-          {/* New Best Streak Celebration */}
-          {showNewBestStreak && (
-            <div className="mt-4 p-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-lg text-center animate-pulse">
-              <div className="flex items-center justify-center gap-2">
-                <Star className="w-5 h-5" />
-                <span className="font-bold">¡Nuevo récord! Best streak: {bestStreak}</span>
-                <Star className="w-5 h-5" />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Question Card */}
@@ -438,10 +494,41 @@ const SpanishConjugationGame = () => {
           )}
         </div>
 
+        {/* New Best Streak Celebration */}
+        {showNewBestStreak && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div className="relative overflow-hidden">
+              {/* Animated background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 animate-pulse opacity-90"></div>
+              
+              {/* Main celebration content */}
+              <div className="relative p-6 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <Star className="w-8 h-8 text-yellow-200" />
+                  <Trophy className="w-8 h-8 text-yellow-200" />
+                  <Star className="w-8 h-8 text-yellow-200" />
+                </div>
+                
+                <div className="text-white font-bold text-xl mb-2">
+                  ¡NUEVO RÉCORD!
+                </div>
+                
+                <div className="text-yellow-200 text-lg font-semibold">
+                  Best Streak: {bestStreak}
+                </div>
+                
+                <div className="text-yellow-100 text-sm mt-2">
+                  ¡Increíble! ¡Sigue así!
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Previous Question Reference */}
         {previousQuestion && (
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-bold mb-3">Previous Question</h3>
+            <h3 className="text-lg font-bold mb-3">Learn from the Question</h3>
             
             <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
               <p className="font-semibold text-blue-700 mb-2">
